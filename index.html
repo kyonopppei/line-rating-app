@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>LINE広告レーティング付与ツール</title>
+  <style>
+    * { box-sizing: border-box; font-family: "Segoe UI", sans-serif; }
+    body {
+      background: #f7f8fa;
+      color: #333;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+    h2 {
+      text-align: center;
+      color: #2b3e50;
+      margin-bottom: 1rem;
+    }
+    .section {
+      background: #fff;
+      border-radius: 10px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    }
+    label, p {
+      font-weight: bold;
+      margin-top: 1rem;
+    }
+    input[type="file"] {
+      margin: 1rem 0;
+    }
+    button {
+      background: #2979ff;
+      border: none;
+      color: white;
+      padding: 0.6rem 1.2rem;
+      margin: 5px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background 0.2s ease;
+    }
+    button:hover {
+      background: #1565c0;
+    }
+    .button-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .preview {
+      background: #fff;
+      border: 1px solid #eee;
+      padding: 1rem;
+      border-radius: 10px;
+      margin-bottom: 1.5rem;
+    }
+    canvas {
+      max-width: 100%;
+      height: auto;
+      border: 1px solid #ccc;
+      display: block;
+      margin-bottom: 0.5rem;
+    }
+    #statusMessage {
+      font-weight: bold;
+      color: #888;
+      margin-bottom: 1rem;
+    }
+    @media (max-width: 600px) {
+      body {
+        padding: 1rem;
+      }
+      .button-group {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h2>LINE広告レーティング自動貼り付けツール</h2>
+
+  <div class="section">
+    <p>① 広告画像をアップロード（複数OK）</p>
+    <input type="file" id="imageInput" multiple />
+  </div>
+
+  <div class="section">
+    <p>② スタンプ位置を選ぶ</p>
+    <div class="button-group">
+      <button onclick="setPosition('top-left')">左上</button>
+      <button onclick="setPosition('top-right')">右上</button>
+      <button onclick="setPosition('bottom-left')">左下</button>
+      <button onclick="setPosition('bottom-right')">右下（推奨）</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <p>③ 生成してダウンロード</p>
+    <div class="button-group">
+      <button onclick="generateImages()">🟢 生成する</button>
+      <button onclick="downloadAll()">📦 ZIPで一括保存</button>
+    </div>
+    <div id="statusMessage"></div>
+  </div>
+
+  <div id="previewContainer"></div>
+
+  <!-- JSZip CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script>
+    let position = 'bottom-right';
+    const OFFSET = 10;
+    const MAX_WIDTH = 1200;
+    const canvasList = [];
+    let imageFiles = [];
+
+    function setPosition(pos) {
+      position = pos;
+    }
+
+    document.getElementById('imageInput').addEventListener('change', function (e) {
+      imageFiles = Array.from(e.target.files);
+      document.getElementById('previewContainer').innerHTML = "";
+      canvasList.length = 0;
+    });
+
+    async function generateImages() {
+      if (imageFiles.length === 0) {
+        alert("画像をアップロードしてください");
+        return;
+      }
+
+      const status = document.getElementById('statusMessage');
+      const container = document.getElementById('previewContainer');
+      container.innerHTML = "";
+      canvasList.length = 0;
+      status.textContent = "🔄 処理中です… 少々お待ちください";
+
+      const stamp = await loadImage('stamp.jpg');
+
+      for (const file of imageFiles) {
+        const img = await loadImageFromFile(file);
+
+        // リサイズ判定
+        let scale = 1;
+        if (img.width > MAX_WIDTH) {
+          scale = MAX_WIDTH / img.width;
+        }
+        const width = img.width * scale;
+        const height = img.height * scale;
+
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = width;
+        canvas.height = height;
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // スタンプ描画
+        const stampWidth = width * 0.05;
+        const stampHeight = stamp.height * (stampWidth / stamp.width);
+        let x = OFFSET;
+        let y = OFFSET;
+        if (position.includes('right')) x = width - stampWidth - OFFSET;
+        if (position.includes('bottom')) y = height - stampHeight - OFFSET;
+        ctx.drawImage(stamp, x, y, stampWidth, stampHeight);
+
+        const div = document.createElement('div');
+        div.className = 'preview';
+        div.appendChild(canvas);
+
+        const btn = document.createElement('button');
+        btn.textContent = `保存 (${file.name})`;
+        btn.onclick = () => {
+          const link = document.createElement('a');
+          link.href = canvas.toDataURL('image/png'); // ⬅️ DL時のみ生成
+          link.download = file.name;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        };
+        div.appendChild(btn);
+        container.appendChild(div);
+
+        canvasList.push({ name: file.name, canvas });
+      }
+
+      status.textContent = "✅ 完了しました！画像を確認してください";
+    }
+
+    function loadImageFromFile(file) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function loadImage(src) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.src = src;
+      });
+    }
+
+    function downloadAll() {
+      if (canvasList.length === 0) {
+        alert("まず画像を生成してください");
+        return;
+      }
+
+      const zip = new JSZip();
+      canvasList.forEach(({ name, canvas }) => {
+        const dataUrl = canvas.toDataURL('image/png');
+        const base64 = dataUrl.split(',')[1];
+        zip.file(name, base64, { base64: true });
+      });
+
+      zip.generateAsync({ type: 'blob' }).then((content) => {
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(content);
+        link.download = 'rated_images.zip';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      });
+    }
+  </script>
+</body>
+</html>
