@@ -28,8 +28,10 @@
       font-weight: bold;
       margin-top: 1rem;
     }
-    input[type="file"] {
+    input[type="file"], select {
       margin: 1rem 0;
+      padding: 0.5rem;
+      font-size: 1rem;
     }
     button {
       background: #2979ff;
@@ -99,7 +101,15 @@
   </div>
 
   <div class="section">
-    <p>③ 生成してダウンロード</p>
+    <p>③ スタンプ（レーティング）を選ぶ</p>
+    <select id="stampSelect">
+      <option value="stamp12.jpg">輔12級</option>
+      <option value="stamp15.png">輔15級</option>
+    </select>
+  </div>
+
+  <div class="section">
+    <p>④ 生成してダウンロード</p>
     <div class="button-group">
       <button onclick="generateImages()">🟢 生成する</button>
       <button onclick="downloadAll()">📦 ZIPで一括保存</button>
@@ -109,7 +119,6 @@
 
   <div id="previewContainer"></div>
 
-  <!-- JSZip CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script>
     let position = 'bottom-right';
@@ -134,22 +143,17 @@
         return;
       }
 
+      const stampFile = document.getElementById('stampSelect').value;
+      const stamp = await loadImage(stampFile);
       const status = document.getElementById('statusMessage');
       const container = document.getElementById('previewContainer');
       container.innerHTML = "";
       canvasList.length = 0;
       status.textContent = "🔄 処理中です… 少々お待ちください";
 
-      const stamp = await loadImage('stamp.jpg');
-
       for (const file of imageFiles) {
         const img = await loadImageFromFile(file);
-
-        // リサイズ判定
-        let scale = 1;
-        if (img.width > MAX_WIDTH) {
-          scale = MAX_WIDTH / img.width;
-        }
+        let scale = img.width > MAX_WIDTH ? MAX_WIDTH / img.width : 1;
         const width = img.width * scale;
         const height = img.height * scale;
 
@@ -159,11 +163,9 @@
         canvas.height = height;
         ctx.drawImage(img, 0, 0, width, height);
 
-        // スタンプ描画
         const stampWidth = width * 0.05;
         const stampHeight = stamp.height * (stampWidth / stamp.width);
-        let x = OFFSET;
-        let y = OFFSET;
+        let x = OFFSET, y = OFFSET;
         if (position.includes('right')) x = width - stampWidth - OFFSET;
         if (position.includes('bottom')) y = height - stampHeight - OFFSET;
         ctx.drawImage(stamp, x, y, stampWidth, stampHeight);
@@ -176,7 +178,7 @@
         btn.textContent = `保存 (${file.name})`;
         btn.onclick = () => {
           const link = document.createElement('a');
-          link.href = canvas.toDataURL('image/png'); // ⬅️ DL時のみ生成
+          link.href = canvas.toDataURL('image/png');
           link.download = file.name;
           document.body.appendChild(link);
           link.click();
